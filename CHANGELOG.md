@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.3] - 2026-11-16
+
+- Add repository metadata required for npm provenance verification.
+
 ## [1.2.2] - 2026-11-16
 
 - Add GitHub release-triggered npm publishing using trusted publishing.
