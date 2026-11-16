@@ -1,0 +1,287 @@
+{
+  "format": 1,
+  "binary": {
+    "name": "agy.exe",
+    "bytes": 231726744,
+    "sha256": "8803c289cac04d6e53f2211592d9981c2d5760bc0d9b4a7f222ef6ecc7abb38a"
+  },
+  "schemas": [
+    {
+      "tool": "post_message",
+      "offset": 71352058,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "The message to post."
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "tool": "swarm",
+      "offset": 71445923,
+      "template": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"action\": {\n      \"type\": \"string\",\n      \"enum\": [\"%s\"],\n      \"description\": \"What to do: %s or %s.\"\n    },\n    \"name\": {\n      \"type\": \"string\",\n      \"description\": \"%s\"\n    },\n%s\n  },\n  \"required\": [\"action\"]\n}",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "models",
+              "add",
+              "model",
+              "kill",
+              "title",
+              "channel",
+              "join"
+            ],
+            "description": "What to do: status, models, add, model, kill, title, channel or join."
+          },
+          "name": {
+            "type": "string",
+            "description": "Roster name of the worker, for add, model and kill (or base name when n > 1 or tasks is set). Short, lowercase, no spaces."
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional number of homogeneous copies to spawn (<name>-1 through <name>-<n>), for add when the user explicitly asks for multiple agents sharing one role and brief. Omit (defaults to 1) to spawn a single named worker."
+          },
+          "model": {
+            "type": "string",
+            "description": "Model to pin this worker to, for add and model: a model name listed by the models action, or its display name. Leave it unset to use your own model, unless the user asks for another."
+          },
+          "all": {
+            "type": "boolean",
+            "description": "For models: list every model add accepts, not just the suggested ones."
+          },
+          "brief": {
+            "type": "string",
+            "description": "The worker's assignment, for add: what it owns and what done looks like. Posted publicly on the board."
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional per-worker slice targets for add when spawning a sharded group (<name>-1 through <name>-<len(tasks)>), each combined with the shared brief. Omit for normal single-worker add calls."
+          },
+          "workspace": {
+            "type": "string",
+            "enum": [
+              "inherit",
+              "share",
+              "branch"
+            ],
+            "description": "Where each worker works, for add. inherit (default) is your own workspace. share gives each worker its own working copy of your repository; branch gives each an isolated clone. kill deletes a share or branch workspace."
+          },
+          "fork": {
+            "type": "string",
+            "description": "Optional roster name of an existing member (or \"coordinator\") whose conversation history the new worker forks from instead of starting fresh."
+          },
+          "title": {
+            "type": "string"
+          },
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For add: the channels each new worker is in besides main, which everyone is in. The first is its home channel, where its brief is posted and its posts go by default. Each must exist. Omit for the default: none for a worker you add as the coordinator, your own channels for a helper you add as a worker."
+          },
+          "op": {
+            "type": "string",
+            "enum": [
+              "create",
+              "archive",
+              "subscribe",
+              "unsubscribe",
+              "list"
+            ],
+            "description": "For channel: create a channel, archive one (no more posts; its creator or the coordinator), subscribe or unsubscribe a member (yourself, or a worker you manage), or list the channels."
+          },
+          "channel": {
+            "type": "string",
+            "description": "Which channel to read. Omit for your own view: main plus the channels you are in, and anything that names you. A channel's name (or \"main\") reads that channel only; \"*\" reads every channel. Ignored with seqs."
+          },
+          "topic": {
+            "type": "string",
+            "description": "For channel create: what the channel is for, in a few words."
+          },
+          "backend": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "spanner",
+              "local"
+            ],
+            "description": "Where the board is stored: auto (default), spanner, or local files. Honoured only on the call that creates the swarm; leave it unset unless the user asks."
+          },
+          "brief_seq": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "For join: the board post that holds this conversation's assignment, when the user gave one."
+          },
+          "swarm": {
+            "type": "string",
+            "description": "For join: the id of the swarm this conversation joins as a worker. Only when the user typed /swarm join <id>."
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "tool": "swarm_wait",
+      "offset": 71627575,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "since": {
+            "type": "integer",
+            "description": "Wake for messages after this sequence number. Pass the last one you have seen — not the board's head — so that a message posted while you were working wakes you instead of being slept through. Zero waits for the whole board."
+          },
+          "mentions_only": {
+            "type": "boolean",
+            "description": "Whether to wake only for a message that calls on you by name, or on `@all`. True by default. You still get every message since `since` when you do wake, so nothing is lost, only the interruption. Pass false to wake for anything posted — worth it when you are free and hunting for work."
+          }
+        },
+        "required": [
+          "since"
+        ]
+      }
+    },
+    {
+      "tool": "read_board",
+      "offset": 71668615,
+      "schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Most messages to return. Default: 20."
+          },
+          "seqs": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "Return exactly these messages, by sequence number, ignoring `since` and `limit`. Use it to pull up a message somebody referred to without dragging in everything around it. A number that names no message is left out."
+          },
+          "since": {
+            "type": "integer",
+            "description": "Return the oldest messages after this sequence number, rather than the most recent ones."
+          },
+          "status": {
+            "type": "boolean",
+            "description": "Return the roster instead of messages: each member's state, what it is parked on, and its last post. Only for a member whose instructions say to use it."
+          }
+        }
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "skills/native_swarm/logo.svg",
+      "bytes": 9427,
+      "sha256": "424d3cd0c6765a1d4cf2a7ebcd62bceb7e9ca1cbfa8429696618e708f73cf11a"
+    },
+    {
+      "path": "skills/native_swarm/SKILL.md",
+      "bytes": 20819,
+      "sha256": "5232a7982b95ce5cfc3e5c7f503af08f9006218d6f86a9f751d95289dfa80f96"
+    },
+    {
+      "path": "skills/swarm_monitor/SKILL.md",
+      "bytes": 5784,
+      "sha256": "eec457f3f332db4b7d472a29dc61a8140304a9058aabcceb624e3e8b12b2894f"
+    },
+    {
+      "path": "skills/swarm_narrator/SKILL.md",
+      "bytes": 11626,
+      "sha256": "99b3200be99796e6377d3d8f32a283439f2d42afd3f1a418f49d1222bf5b289f"
+    },
+    {
+      "path": "skills/swarm_pane/SKILL.md",
+      "bytes": 1987,
+      "sha256": "98e5e8c7b8e062be14ccd35781204e2abae79ab4b9812613cad947712c154c4d"
+    },
+    {
+      "path": "plugins/swarm/assets/logo.svg",
+      "bytes": 9427,
+      "sha256": "424d3cd0c6765a1d4cf2a7ebcd62bceb7e9ca1cbfa8429696618e708f73cf11a"
+    },
+    {
+      "path": "plugins/swarm/plugin.json",
+      "bytes": 131,
+      "sha256": "376e9002b623b8040310496fd65942a256ffdfd41dbac902146d7485c21510d7"
+    },
+    {
+      "path": "plugins/swarm/README.md",
+      "bytes": 15,
+      "sha256": "c68343f0d00d128571ef601acd6e9b0704847e10fb5962512868874c5eddcb7d"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/app.js",
+      "bytes": 92955,
+      "sha256": "4be222865680ea64bb19510966b747815e75f29ebe82b199a0280d34822697be"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/channels.mjs",
+      "bytes": 10421,
+      "sha256": "30d0a8f646ef69fa3e07a16197e95dae9f90bd4002fc2be09ef3f78ab16bfc02"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/hive.css",
+      "bytes": 34361,
+      "sha256": "ab7cb22e297be62a7a817a0c420cb470122c766abf44a3319b875ec754ad2f42"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/hive.js",
+      "bytes": 73016,
+      "sha256": "ae5308ed8040d8cd2fd74b73f3ab03d706bb872f170a7c38bd5984a8bd525116"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/index.html",
+      "bytes": 15430,
+      "sha256": "16faae3b703f62cebd2b226678cfec173975333e64e8b707b356e352d8fff2ec"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/main.mjs",
+      "bytes": 59227,
+      "sha256": "18775901de1c90b99b7bd9ba6ea4dde89bd906efc31dc17b55843e066528c424"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/narrator_bootstrap.js",
+      "bytes": 6593,
+      "sha256": "1a31f8c2f623a0f05eccccc588d9fabb0a6bc088ca77caf3806ce1854c41c4a7"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/package.json",
+      "bytes": 117,
+      "sha256": "3fd619df42459ea6537017d4d0a67a8d1e5ebc889c2bcc82fd151dc893559d34"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/README.md",
+      "bytes": 21773,
+      "sha256": "66d43bfe5bad2576563adde2985f4c805e59b548ab9de94b732739f1a943f380"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/sidecar.json",
+      "bytes": 686,
+      "sha256": "025741e4fcff65af30ef0be5fd823a77387d636827e9582e7ff715242a8c2ca4"
+    },
+    {
+      "path": "plugins/swarm/sidecars/swarm_board/styles.css",
+      "bytes": 40648,
+      "sha256": "5752c74d5aecd40945552836025a6a28e7543e7c084586bfa0acfcd045f408c3"
+    }
+  ],
+  "limits": "Bundled source assets and embedded JSON schemas recovered exactly. Native Go implementation was not reconstructed as source. Cloud backend, credit/quota services and cross-machine transport are AGY services, not bundled portable code."
+}
