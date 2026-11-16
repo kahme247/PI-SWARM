@@ -7,7 +7,7 @@ A native pi package for persistent multi-agent work, recovered from Antigravity 
 Requires Node.js 22+ and pi. Developed against `@earendil-works/pi-coding-agent` 1.5.2; older pi APIs are not claimed compatible.
 
 ```sh
-pi install git:github.com/kahme247/PI-SWARM@v1.2.1
+pi install git:github.com/kahme247/PI-SWARM@v1.2.2
 ```
 
 Restart pi or `/reload`, then:
@@ -18,7 +18,7 @@ Restart pi or `/reload`, then:
 /swarm board
 ```
 
-Try without saving global settings: `pi -e git:github.com/kahme247/PI-SWARM@v1.2.1`. The package does not change your default model or credentials. Workers inherit the caller's provider/model, reasoning level and configured provider registrations. Each worker makes real billable model requests; dormant workers do not. Load only trusted extensions: workers have normal filesystem and shell access. Ownership briefs and workspace separation are coordination, not an OS security sandbox.
+Try without saving global settings: `pi -e git:github.com/kahme247/PI-SWARM@v1.2.2`. The package does not change your default model or credentials. Workers inherit the caller's provider/model, reasoning level and configured provider registrations. Each worker makes real billable model requests; dormant workers do not. Load only trusted extensions: workers have normal filesystem and shell access. Ownership briefs and workspace separation are coordination, not an OS security sandbox.
 
 ## Commands
 

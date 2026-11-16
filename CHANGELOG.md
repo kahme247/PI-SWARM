@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.2] - 2026-11-16
+
+- Add GitHub release-triggered npm publishing using trusted publishing.
+
 ## [1.2.1] - 2026-11-16
 
 - Rename the package to `@kahme247/pi-swarm`.
