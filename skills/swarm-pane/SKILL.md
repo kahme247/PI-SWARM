@@ -37,7 +37,7 @@ directory for this coordinator conversation.
     them here.
 
 > [!NOTE]
-> `SWARM_DIR` for a pi-native-swarm runtime corresponds to the directory the
+> `SWARM_DIR` for a Pi-Swarm runtime corresponds to the directory the
 > runtime uses for board and roster files (reported as `dir` in `/swarm board`'s
 > Overview tab). Screenshots must also be reachable from that directory for the
 > web board (`/swarm web`) to serve them.

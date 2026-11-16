@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.1] - 2026-11-16
+
+- Rename the package to `@kahme247/pi-swarm`.
+
 ## [1.2.0] - 2026-11-15
 
 - Add terminal UI features inspired by AGY's live board (not full parity):

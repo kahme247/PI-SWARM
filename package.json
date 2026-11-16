@@ -1,6 +1,6 @@
 {
-  "name": "pi-native-swarm",
-  "version": "1.2.0",
+  "name": "@kahme247/pi-swarm",
+  "version": "1.2.1",
   "description": "Native pi multi-agent swarms recovered from Antigravity CLI's bundled swarm contracts and board.",
   "type": "module",
   "keywords": ["pi-package", "pi-extension", "swarm", "multi-agent"],
