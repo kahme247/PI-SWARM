@@ -28,7 +28,8 @@ Use `n` for identical numbered copies or `tasks` for one slice per numbered copy
 - `post_message{text:"@verifier check #4 and #6"}`. Cite sequence numbers instead of re-quoting reports. Mentions are wakeup doorbells, not CCs. Name only the next actor; tag the coordinator for a final deliverable, blocker or decision.
 - `read_board{since:LAST}` pages oldest-first. `read_board{seqs:[4,6]}` reads cited posts directly. Omitting `since` reads recent posts. Update LAST only through posts actually read.
 - `swarm_wait{since:LAST}` parks until mentioned without model requests. `mentions_only:false` hears any visible post. Never poll the board; never substitute an unread head for LAST. Messages posted while you were working must not be slept through.
-- Workers' final result starts `@coordinator [done]` and includes concrete output and verification. Do not confuse a quiet worker or interim update with completion.
+- Workers post one final `@coordinator [done]` report describing what happened, the concrete result, verification, and limitations. Do not confuse a quiet worker, `[result]` (turn ended without confirmed completion), or interim update with success.
+- The runtime posts one `[swarm-results]` summary per completed set of worker results to the main session. Give the user a concise outcome and any failures or unfinished work. Do not acknowledge notifications already handled, reply just to say thanks, or mention finished workers unless assigning genuinely new work.
 - If all task workers are waiting and the goal is unfinished, the coordinator must hand out the next step. Nothing is coming otherwise.
 - Before reporting final completion, `post_message{text:"[done] <summary>"}` with no mention so monitoring can go dormant.
 

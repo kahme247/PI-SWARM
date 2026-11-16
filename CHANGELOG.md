@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.4] - 2026-11-16
+
+- Batch coordinator notifications and suppress duplicate or already-read updates to prevent acknowledgement loops.
+- Report worker outcomes and verification, with one combined results summary delivered to the main session when all workers return results.
+- Keep failures, aborted turns, and unconfirmed assignment completion distinct from successful completion.
+
 ## [1.2.3] - 2026-11-16
 
 - Add repository metadata required for npm provenance verification.

@@ -103,32 +103,55 @@ export class SwarmRuntime extends EventEmitter {
   _matches(member, message, since, mentionsOnly) {
     return message.seq > since && message.agent !== member.name && (mentionsOnly && !(member.role === 'monitor' && member.monitor_dormant) ? message.targets?.includes(member.name) : this._visible(member, message));
   }
-  async _post(actor, { text, channel }, { route = true } = {}) {
+  async _post(actor, { text, channel }, { route = true, targets: addressed } = {}) {
     if (typeof text !== 'string' || !text.trim()) throw new Error('Message text must not be empty');
     channel ??= actor.channels.find(c => c !== 'main') ?? 'main';
     const area = this.channels.get(channel);
     if (!area || area.archived) throw new Error('Unknown or archived channel');
     if (!this._privileged(actor) && !actor.channels.includes(channel)) throw new Error('Subscribe before posting to this channel');
-    const targets = [...this._targets(text)];
+    const resultStatus = actor.role === 'worker' ? /^(?:@[a-z][a-z0-9-]*\s+)*\[(done|result|error)\](?:\s|$)/i.exec(text.trim())?.[1].toLowerCase() : undefined;
+    const targets = addressed ?? [...this._targets(text)];
+    if (resultStatus && !targets.includes('coordinator')) targets.push('coordinator');
     const message = { seq: this.head + 1, agent: actor.name, text, channel, time: new Date().toISOString(), targets, visible_to: [...this.members.values()].filter(m => this._privileged(m) || m.channels.includes(channel)).map(m => m.name) };
     await appendFile(path.join(this.dir, 'board.jsonl'), JSON.stringify(message) + '\n');
     this.messages.push(message); actor.last_post_seq = message.seq; actor.last_post_time = message.time;
+    if (resultStatus) actor.last_result = { seq: message.seq, status: resultStatus };
     await this._save();
     if (route) this._route(message);
+    if (resultStatus) await this._summarizeResults();
     return { ...message, head: this.head };
+  }
+  async _summarizeResults() {
+    const workers = [...this.members.values()].filter(m => m.role === 'worker' && m.state !== 'killed');
+    if (!workers.length || workers.some(m => !m.last_result || this.pending.get(m.name)?.length)) return;
+    const coordinator = this.members.get('coordinator');
+    const key = workers.map(m => `${m.name}:${m.last_result.seq}`).join(',');
+    if (coordinator.last_summary_key === key) return;
+    const complete = workers.every(m => m.last_result.status === 'done');
+    const lines = workers.map(m => {
+      const result = this.messages.find(post => post.seq === m.last_result.seq);
+      return `- ${m.name} [${m.last_result.status}] (#${result.seq}): ${result.text}`;
+    });
+    coordinator.last_summary_key = key;
+    await this._post({ name: 'system', channels: ['main'] }, {
+      channel: 'main', text: `@coordinator [swarm-results] ${complete ? 'All workers reported completion.' : 'All workers returned results; not all assignments are confirmed successful.'}\n${lines.join('\n')}`,
+    }, { targets: ['coordinator'] });
   }
   post(actor, args) { return this._mutate(() => this._post(this._actor(actor), args)); }
   _route(message) {
     const awakened = new Set();
     for (const waiter of [...this.waiters]) if (this._matches(waiter.member, message, waiter.since, waiter.mentionsOnly)) {
       awakened.add(waiter.member.name);
+      delete waiter.member.last_result;
+      waiter.member.last_wake_seq = message.seq;
       this._resumeMonitor(waiter.member);
       waiter.finish({ head: this.head, messages: this.messages.filter(m => m.seq > waiter.since && this._visible(waiter.member, m)), reason: 'message' });
     }
     for (const member of this.members.values()) {
       if (member.state === 'killed' || member.name === message.agent || awakened.has(member.name)) continue;
       const mentionsOnly = member.wake_mode !== 'anything';
-      if (!this._matches(member, message, member.wait_since ?? 0, mentionsOnly)) continue;
+      if (!this._matches(member, message, Math.max(member.wait_since ?? 0, member.last_read_seq ?? 0, member.last_wake_seq ?? 0), mentionsOnly)) continue;
+      member.last_wake_seq = message.seq;
       this._resumeMonitor(member);
       if (member.name === 'coordinator') {
         Promise.resolve().then(() => this.onCoordinatorMessage?.(message)).catch(error => this.emit('workerError', { member: member.name, error }));
@@ -300,6 +323,7 @@ export class SwarmRuntime extends EventEmitter {
   }
   _enqueue(member, message) {
     if (this.closed || member.state === 'killed') return;
+    delete member.last_result;
     const pending = this.pending.get(member.name) ?? []; pending.push(message); this.pending.set(member.name, pending);
     this.wakeVersions.set(member.name, (this.wakeVersions.get(member.name) ?? 0) + 1);
     if (!this.running.has(member.name)) {
@@ -333,12 +357,19 @@ export class SwarmRuntime extends EventEmitter {
         const delivered = [...unread, ...batch.filter(m => !unread.some(u => u.seq === m.seq && u.text === m.text))];
         this._state(member, 'working'); this._seen(member, delivered);
         await this._mutate(() => this._save());
-        await worker.prompt(delivered.map(m => `#${m.seq} ${m.agent} [${m.channel}]: ${m.text}`).join('\n\n'));
+        const startedAt = this.head;
+        const result = await worker.prompt(delivered.map(m => `#${m.seq} ${m.agent} [${m.channel}]: ${m.text}`).join('\n\n'));
         member.sessionFile = worker.sessionFile ?? member.sessionFile; delete member.error;
+        if (member.role === 'worker' && !this.closed && member.state !== 'killed' && !this.pending.get(member.name)?.length && !(member.last_result?.seq > startedAt)) {
+          const text = typeof result === 'string' ? result.trim() : '';
+          await this._mutate(() => this._post(member, {
+            channel: 'main', text: `@coordinator [result] ${member.name} ended its turn (assignment completion unconfirmed).\n${text || 'No final response was returned.'}`,
+          }, { targets: [...new Set(['coordinator', member.added_by ?? 'coordinator'])] }));
+        }
       }
     } catch (error) {
       failed = true;
-      if (!this.closed && member.state !== 'killed' && error.name !== 'AbortError') {
+      if (!this.closed && member.state !== 'killed') {
         member.error = String(error.message ?? error);
         this.emit('workerError', { member: member.name, error });
         await this._mutate(() => this._post(member, { text: `@coordinator [error] ${member.name}: ${member.error}`, channel: 'main' }));

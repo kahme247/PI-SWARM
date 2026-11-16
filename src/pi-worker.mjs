@@ -10,7 +10,8 @@ Use swarm status, post_message, read_board and swarm_wait to cooperate with the 
 Your brief is public. Start with your assignment, not a greeting. Own only the assigned work.
 Workers may add helpers, kill only helpers they added, switch their own/helper models, and manage their own/helper subscriptions. Only coordinator may title the swarm.
 Mention only the member who must act next: @name, @group, @#channel, or @all for genuine broadcasts. Every mention costs a model turn, not a CC. Cite #seq instead of copying reports.
-Post final results as @<owner> [done] <evidence>; ask the next peer by name on handoff and coordinator only for final deliverables, blockers or decisions.
+When your assignment is complete, post exactly one @coordinator [done] report with what changed, the concrete result, verification, and any limitations. Mention your owner too if it is another worker. Never mark an interim update or a failed/aborted turn as done. Ask the next peer by name on handoff; report blockers or decisions to coordinator.
+Do not reply to acknowledgements or replayed notifications. After your final report, stop; wait for a genuinely new assignment rather than acknowledging completion again.
 Do not poll. swarm_wait with your highest actually-read seq is a free, abortable sleep. At the end of an ordinary turn you are automatically parked until mentioned.
 Workers share a working copy unless workspace is share (Git worktree from committed HEAD) or branch (isolated clone from committed HEAD). Uncommitted parent edits are NOT copied. Commit isolated changes and arrange integration; kill retires the worker but preserves its isolated directory and branch for recovery.
 A fork inherits conversation history, not its prior member identity or authority: the name and assignment below override the inherited assignment.`;
@@ -78,12 +79,24 @@ export async function createPiWorker(member, runtime, options = {}) {
   // SDK prompt resolves after an error stop as well as success; surface failed turns to
   // the runtime without converting model failures into fabricated board messages.
   let failure;
+  let aborted;
+  let finalText;
   const unsubscribe = session.subscribe(event => {
-    if (event.type === 'message_end' && event.message.role === 'assistant' && event.message.stopReason === 'error') failure = event.message.errorMessage ?? 'Pi worker model request failed';
+    if (event.type === 'agent_settled' && event.aborted) aborted = true;
+    if (event.type !== 'message_end' || event.message.role !== 'assistant') return;
+    failure = event.message.stopReason === 'error' ? event.message.errorMessage ?? 'Pi worker model request failed' : undefined;
+    aborted = event.message.stopReason === 'aborted';
+    finalText = event.message.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
   });
   return {
     get sessionFile() { return session.sessionFile ?? sessionManager.getSessionFile(); },
-    async prompt(text) { failure = undefined; await session.prompt(text); if (failure) throw new Error(failure); },
+    async prompt(text) {
+      failure = finalText = undefined; aborted = false;
+      await session.prompt(text);
+      if (failure) throw new Error(failure);
+      if (aborted) throw Object.assign(new Error('Pi worker turn aborted'), { name: 'AbortError' });
+      return finalText;
+    },
     abort: () => session.abort(),
     async setModel(value) { await session.setModel(resolveModel(value)); },
     dispose() { unsubscribe(); session.dispose(); },

@@ -29,6 +29,25 @@ export default function swarmExtension(pi) {
   let generation = 0;
   let currentContext;
   let coordinatorWaiting = false;
+  let notificationTask;
+  let lastNotifiedSeq = 0;
+  const pendingNotifications = new Map();
+
+  function flushNotifications() {
+    notificationTask = undefined;
+    if (!active || coordinatorWaiting || !currentContext.isIdle()) return;
+    const readThrough = active.runtime.members.get('coordinator').last_read_seq ?? 0;
+    const messages = [...pendingNotifications.values()].filter(m => m.seq > readThrough && m.seq > lastNotifiedSeq).sort((a, b) => a.seq - b.seq);
+    pendingNotifications.clear();
+    if (!messages.length) return;
+    lastNotifiedSeq = messages.at(-1).seq;
+    pi.sendMessage({ customType: 'swarm-wakeup',
+      content: `New swarm results:\n${messages.map(m => `#${m.seq} ${m.agent}: ${m.text}`).join('\n\n')}\nAct only on new actionable results. Do not acknowledge old notifications or wake workers just to acknowledge them. If this includes [swarm-results], give the user a concise outcome, verification, and any failures or unfinished work.`,
+      display: true, details: { seqs: messages.map(m => m.seq) } }, { triggerTurn: true, deliverAs: 'followUp' });
+  }
+  function scheduleNotifications() {
+    if (!notificationTask) notificationTask = setImmediate(flushNotifications);
+  }
 
   function directory(ctx) {
     return join(getAgentDir(), 'swarm', ctx.sessionManager.getSessionId());
@@ -38,6 +57,8 @@ export default function swarmExtension(pi) {
   }
   async function shutdown() {
     generation++;
+    clearImmediate(notificationTask); notificationTask = undefined;
+    pendingNotifications.clear(); lastNotifiedSeq = 0;
     const pending = opening;
     if (pending) await pending.catch(() => {});
     const old = active;
@@ -81,10 +102,9 @@ export default function swarmExtension(pi) {
           if (!model || !await pi.setModel(model)) throw new Error(`Cannot select pi model: ${name}`);
         },
         onCoordinatorMessage: (message) => {
-          if (epoch !== generation || coordinatorWaiting) return;
-          pi.sendMessage({ customType: 'swarm-wakeup',
-            content: `Swarm board update: ${typeof message === 'string' ? message : JSON.stringify(message)}\nRead the board, act on the addressed result, and continue coordinating.`,
-            display: true }, { triggerTurn: true, deliverAs: 'followUp' });
+          if (epoch !== generation || message.seq <= lastNotifiedSeq) return;
+          pendingNotifications.set(message.seq, message);
+          scheduleNotifications();
         },
       });
       await runtime.init();
@@ -113,7 +133,10 @@ export default function swarmExtension(pi) {
         if (spec.method === 'wait') coordinatorWaiting = true;
         const result = await runtime[spec.method]('coordinator', args, signal);
         return { content: [{ type: 'text', text: JSON.stringify(withLink(result), null, 2) }], details: result };
-      } finally { if (spec.method === 'wait') coordinatorWaiting = false; }
+      } finally {
+        if (spec.method === 'wait') coordinatorWaiting = false;
+        scheduleNotifications();
+      }
     } });
   }
 
@@ -178,9 +201,10 @@ export default function swarmExtension(pi) {
     currentContext = ctx;
     if (active) await active.runtime.setCoordinatorState('working');
   });
-  pi.on('agent_end', async (_event, ctx) => {
+  pi.on('agent_settled', async (_event, ctx) => {
     currentContext = ctx;
     if (active) await active.runtime.setCoordinatorState('waiting');
+    scheduleNotifications();
   });
   pi.on('before_agent_start', (_event, ctx) => {
     currentContext = ctx;
